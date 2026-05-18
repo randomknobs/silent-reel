@@ -1,0 +1,30 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Per-function timeouts (26s requires Netlify Pro; on free tier these are capped at 10s
+# but the config is still accepted)
+[functions."gemini-analyze"]
+  timeout = 26
+[functions."file-upload"]
+  timeout = 26
+[functions."upload-cover"]
+  timeout = 26
+
+# /api/* → /.netlify/functions/* — matches the GOSH_MUSIC2 convention
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# CRITICAL: COOP/COEP headers — without these, ffmpeg.wasm multi-threaded build
+# will refuse to instantiate SharedArrayBuffer on deployed Netlify.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Embedder-Policy = "require-corp"
+    Cross-Origin-Opener-Policy = "same-origin"
