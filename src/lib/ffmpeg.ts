@@ -26,7 +26,6 @@ export async function getFFmpeg(): Promise<FFmpeg> {
 
     // Log ffmpeg's own output to console for debugging filter chains
     ff.on('log', ({ message }) => {
-      // ffmpeg is noisy on startup — only log the interesting parts
       if (message.includes('Error') || message.includes('error')) {
         console.error('[ffmpeg]', message)
       }
