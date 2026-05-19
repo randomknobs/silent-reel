@@ -5,7 +5,7 @@ import { compressForAnalysis } from '../lib/videoPipeline'
 export type AnalysisStatus =
   | { status: 'idle' }
   | { status: 'analyzing' }
-  | { status: 'success'; analysis: SceneAnalysis; modelUsed: string }
+  | { status: 'success'; analysis: SceneAnalysis; modelUsed: string; proxyBlob: Blob }
   | { status: 'error'; error: string }
 
 const MAX_INLINE_VIDEO_BYTES = 4.5 * 1024 * 1024  // ~4.5 MB raw, ~6 MB base64
@@ -57,6 +57,7 @@ export function useSceneAnalysis() {
         status: 'success',
         analysis: data.analysis,
         modelUsed: data.modelUsed,
+        proxyBlob: compressedBlob,
       })
     } catch (err) {
       setState({

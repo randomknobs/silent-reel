@@ -17,26 +17,19 @@ export default function App() {
   const sunoGen = useSunoGeneration()
   const finalMux = useFinalMux()
 
-  // Trigger sonification once analysis succeeds. Runs in parallel with the
-  // video preview being visible — does not block anything else.
+  // Trigger sonification as soon as Gemini analysis succeeds. We sonify the
+  // CLEAN analysis proxy (h.264 of the original content, downscaled, NO film
+  // artifacts). Brightness curve tracks real content motion rather than the
+  // added grain/flicker/dust. Runs in parallel with styling — does not wait
+  // for styling to finish.
   useEffect(() => {
-    console.log('[sonif-trigger] check:', {
-      analysisStatus: analysis.status,
-      processingStatus: state.status,
-      hasStyledBlob: !!state.styledBlob,
-      sonificationStatus: sonification.state.status,
-    })
-
     if (
       analysis.status === 'success' &&
-      state.status === 'done' &&
-      state.styledBlob &&
       sonification.state.status === 'idle'
     ) {
-      console.log('[sonif-trigger] FIRING with blob', state.styledBlob)
-      sonification.run(state.styledBlob, analysis.analysis)
+      sonification.run(analysis.proxyBlob, analysis.analysis)
     }
-  }, [analysis, state.status, state.styledBlob, sonification])
+  }, [analysis, sonification])
 
   // Once sonification succeeds, kick Suno cover-generation pipeline (upload → submit → poll)
   useEffect(() => {
