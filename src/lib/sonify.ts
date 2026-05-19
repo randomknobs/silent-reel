@@ -513,6 +513,13 @@ export async function sonifyVideoToMp3(
 ): Promise<SonifyResult> {
   const onProgress = opts.onProgress ?? (() => {})
 
+  console.log('[sonify-start]', {
+    blobSize: videoBlob.size,
+    blobType: videoBlob.type,
+    hasAnalysis: !!analysis,
+    analysisFields: analysis ? Object.keys(analysis) : null,
+  })
+
   onProgress({ stage: 'extract', progress: 0 })
   const r = await extractBrightnessFromVideo(videoBlob, {
     ...(opts.extractOpts || {}),

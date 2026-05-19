@@ -24,6 +24,10 @@ export function useSonification() {
       const objectUrl = URL.createObjectURL(result.mp3Blob)
       setState({ status: 'success', result, objectUrl })
     } catch (err) {
+      console.error('[sonif-error]', err)
+      if (err instanceof Error && err.stack) {
+        console.error('[sonif-error] stack:', err.stack)
+      }
       setState({
         status: 'error',
         error: err instanceof Error ? err.message : 'Unknown sonification error',
