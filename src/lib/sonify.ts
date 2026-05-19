@@ -1,4 +1,4 @@
-import * as lamejs from 'lamejs'
+import { Mp3Encoder } from '@breezystack/lamejs'
 import type {
   BrightnessResult,
   ExtractOpts,
@@ -469,9 +469,9 @@ export async function sonifyBrightness(
 export function audioBufferToMp3Blob(buffer: AudioBuffer): Blob {
   const sr = buffer.sampleRate
   const len = buffer.length
-  const mp3enc = new lamejs.Mp3Encoder(1, sr, 128)
+  const mp3enc = new Mp3Encoder(1, sr, 128)
   const bs = 1152
-  const mp3Data: Int8Array[] = []
+  const mp3Data: Uint8Array[] = []
   const mono = new Int16Array(len)
   const numCh = buffer.numberOfChannels
 
@@ -497,8 +497,8 @@ export function audioBufferToMp3Blob(buffer: AudioBuffer): Blob {
   if (end.length > 0) mp3Data.push(end)
 
   // TS 6 generic ArrayBufferLike defeats Blob's BlobPart inference for typed arrays.
-  // lamejs always returns plain-ArrayBuffer-backed Int8Array, so this cast is safe.
-  return new Blob(mp3Data as Int8Array<ArrayBuffer>[], { type: 'audio/mp3' })
+  // lamejs always returns plain-ArrayBuffer-backed Uint8Array, so this cast is safe.
+  return new Blob(mp3Data as Uint8Array<ArrayBuffer>[], { type: 'audio/mp3' })
 }
 
 // ── Top-level pipeline ───────────────────────────────────────────────────────
