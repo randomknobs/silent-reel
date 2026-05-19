@@ -1,7 +1,12 @@
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Cascade fallback: try newer model first, fall through to older if 5xx persists.
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',    // best, but can be saturated
+  'gemini-2.0-flash',    // different infra path, often up when 2.5 isn't
+  'gemini-1.5-flash',    // older, very stable
+  'gemini-1.5-flash-8b', // smallest, almost always available
+];
 
 const ANALYSIS_PROMPT = `You are analyzing a short video that has been stylized as a 1920s silent film (black and white, film grain, vignette, brightness flicker). Your job is to describe the scene and suggest a soundtrack a silent-film accompanist would play.
 
