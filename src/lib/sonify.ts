@@ -559,3 +559,158 @@ export async function sonifyVideoToMp3(
     },
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ALIGNMENT — match Suno output timing to original sonification via
+//  cross-correlation of onset envelopes.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Per-frame RMS energy followed by half-wave-rectified derivative.
+ * Returns a Float32Array at targetFps temporal resolution.
+ */
+export function computeOnsetEnvelope(audioBuffer: AudioBuffer, targetFps = 100): Float32Array {
+  const sampleRate = audioBuffer.sampleRate
+  const samplesPerFrame = Math.max(1, Math.round(sampleRate / targetFps))
+  const channel = audioBuffer.getChannelData(0)
+  const numFrames = Math.floor(channel.length / samplesPerFrame)
+
+  const energy = new Float32Array(numFrames)
+  for (let i = 0; i < numFrames; i++) {
+    const start = i * samplesPerFrame
+    const end = Math.min(start + samplesPerFrame, channel.length)
+    let sumSq = 0
+    for (let j = start; j < end; j++) sumSq += channel[j] * channel[j]
+    energy[i] = Math.sqrt(sumSq / (end - start))
+  }
+
+  const onset = new Float32Array(numFrames)
+  for (let i = 1; i < numFrames; i++) {
+    const d = energy[i] - energy[i - 1]
+    onset[i] = d > 0 ? d : 0
+  }
+  return onset
+}
+
+/** Normalize a signal to zero mean, unit variance. */
+export function zScoreNormalize(arr: Float32Array): Float32Array {
+  const n = arr.length
+  if (n === 0) return arr
+  let mean = 0
+  for (let i = 0; i < n; i++) mean += arr[i]
+  mean /= n
+  let variance = 0
+  for (let i = 0; i < n; i++) {
+    const d = arr[i] - mean
+    variance += d * d
+  }
+  variance /= n
+  const stddev = Math.sqrt(variance) || 1
+  const out = new Float32Array(n)
+  for (let i = 0; i < n; i++) out[i] = (arr[i] - mean) / stddev
+  return out
+}
+
+/**
+ * Cross-correlate signal against reference. Returns best lag (in frames) and score.
+ * For each lag value in [0, maxLagFrames], computes dot product of
+ * signal[lag : lag + |reference|] with reference.
+ */
+export function crossCorrelate(
+  signal: Float32Array,
+  reference: Float32Array,
+  maxLagFrames: number,
+): { lag: number; score: number } {
+  const refLen = reference.length
+  const lagLimit = Math.min(maxLagFrames, Math.max(0, signal.length - refLen))
+  let bestLag = 0
+  let bestScore = -Infinity
+  for (let lag = 0; lag <= lagLimit; lag++) {
+    let score = 0
+    for (let i = 0; i < refLen; i++) {
+      score += signal[i + lag] * reference[i]
+    }
+    if (score > bestScore) {
+      bestScore = score
+      bestLag = lag
+    }
+  }
+  return { lag: bestLag, score: bestScore }
+}
+
+/** Trim an AudioBuffer to [startSec, endSec], clamped to buffer range. */
+export function trimAudioBufferRange(buf: AudioBuffer, startSec: number, endSec: number): AudioBuffer {
+  const sr = buf.sampleRate
+  const startSample = Math.max(0, Math.floor(startSec * sr))
+  const endSample = Math.min(buf.length, Math.floor(endSec * sr))
+  const length = Math.max(1, endSample - startSample)
+  const out = new AudioBuffer({
+    numberOfChannels: buf.numberOfChannels,
+    length,
+    sampleRate: sr,
+  })
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const src = buf.getChannelData(ch)
+    const dst = out.getChannelData(ch)
+    dst.set(src.subarray(startSample, endSample))
+  }
+  return out
+}
+
+export interface AlignmentResult {
+  alignedBlob: Blob
+  lagSec: number
+  score: number
+  sunoOriginalDuration: number
+  alignedDuration: number
+}
+
+/**
+ * Align a Suno track to a sonification reference. Fetches the Suno URL,
+ * decodes, cross-correlates onset envelopes, and trims to the matching window.
+ */
+export async function alignSunoToSonification(
+  sunoUrl: string,
+  sonifiedMp3Blob: Blob,
+  opts: { maxLagSec?: number; envFps?: number } = {},
+): Promise<AlignmentResult> {
+  const maxLagSec = opts.maxLagSec ?? 30
+  const envFps = opts.envFps ?? 100
+
+  // 1. Download Suno track
+  const sunoRes = await fetch(sunoUrl)
+  if (!sunoRes.ok) throw new Error(`Suno track fetch failed: ${sunoRes.status}`)
+  const sunoArrBuf = await sunoRes.arrayBuffer()
+
+  // 2. Decode both audios
+  const audioCtx = new (window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+  const sunoBuf = await audioCtx.decodeAudioData(sunoArrBuf.slice(0))
+  const sonifiedArr = await sonifiedMp3Blob.arrayBuffer()
+  const sonifiedBuf = await audioCtx.decodeAudioData(sonifiedArr)
+
+  // 3. Onset envelopes, normalized
+  const sunoEnv = zScoreNormalize(computeOnsetEnvelope(sunoBuf, envFps))
+  const sonEnv = zScoreNormalize(computeOnsetEnvelope(sonifiedBuf, envFps))
+
+  // 4. Cross-correlate
+  const maxLagFrames = Math.round(maxLagSec * envFps)
+  const { lag: lagFrames, score } = crossCorrelate(sunoEnv, sonEnv, maxLagFrames)
+  const lagSec = lagFrames / envFps
+
+  if (import.meta.env.DEV) {
+    console.log(`[align] lag=${lagSec.toFixed(2)}s, score=${score.toFixed(2)}`)
+  }
+
+  // 5. Trim to [lagSec, lagSec + sonifiedDuration]
+  const endSec = Math.min(lagSec + sonifiedBuf.duration, sunoBuf.duration)
+  const aligned = trimAudioBufferRange(sunoBuf, lagSec, endSec)
+
+  return {
+    alignedBlob: audioBufferToMp3Blob(aligned),
+    lagSec,
+    score,
+    sunoOriginalDuration: sunoBuf.duration,
+    alignedDuration: aligned.duration,
+  }
+}

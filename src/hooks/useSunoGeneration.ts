@@ -1,13 +1,16 @@
 import { useCallback, useState, useRef } from 'react'
 import type { SunoTrack, SunoStatus } from '../types/suno'
 import type { SceneAnalysis } from '../types/analysis'
+import { alignSunoToSonification } from '../lib/sonify'
+import type { AlignmentResult } from '../lib/sonify'
 
 export type SunoGenStatus =
   | { status: 'idle' }
   | { status: 'uploading' }
   | { status: 'submitting' }
   | { status: 'generating'; sunoStatus: SunoStatus; pollAttempt: number; tracks: SunoTrack[] }
-  | { status: 'success'; tracks: SunoTrack[]; modelUsed: 'V5' }
+  | { status: 'aligning'; tracks: SunoTrack[] }
+  | { status: 'success'; tracks: SunoTrack[]; alignment: AlignmentResult; alignedUrl: string; modelUsed: 'V5' }
   | { status: 'error'; error: string }
 
 const POLL_INTERVAL_MS = 5000
@@ -134,13 +137,48 @@ export function useSunoGeneration() {
             return
           }
 
-          // SUCCESS
+          // SUCCESS — Suno finished, but its output may be 2-3 min and not exactly
+          // timed to our sonification. Run cross-correlation alignment to find
+          // the matching window and trim to that.
           stopPolling()
           if (tracks.length === 0) {
             setState({ status: 'error', error: 'Suno returned SUCCESS but no tracks' })
             return
           }
-          setState({ status: 'success', tracks, modelUsed: 'V5' })
+
+          setState({ status: 'aligning', tracks })
+
+          try {
+            const firstTrack = tracks[0]
+            if (!firstTrack.audioUrl) {
+              throw new Error('First track has no audioUrl')
+            }
+
+            const alignment = await alignSunoToSonification(firstTrack.audioUrl, sonifiedMp3)
+            const alignedUrl = URL.createObjectURL(alignment.alignedBlob)
+
+            if (import.meta.env.DEV) {
+              console.log(
+                `[suno-align] Suno ${alignment.sunoOriginalDuration.toFixed(1)}s → ` +
+                `aligned ${alignment.alignedDuration.toFixed(1)}s @ lag ${alignment.lagSec.toFixed(2)}s ` +
+                `(corr score ${alignment.score.toFixed(2)})`,
+              )
+            }
+
+            setState({
+              status: 'success',
+              tracks,
+              alignment,
+              alignedUrl,
+              modelUsed: 'V5',
+            })
+          } catch (alignErr) {
+            console.error('[suno-align] failed:', alignErr)
+            setState({
+              status: 'error',
+              error: `Alignment failed: ${alignErr instanceof Error ? alignErr.message : 'unknown'}`,
+            })
+          }
         } catch (err) {
           console.warn('[suno] poll error', err)
           // Don't fail immediately on network — keep trying
@@ -158,7 +196,10 @@ export function useSunoGeneration() {
 
   const reset = useCallback(() => {
     stopPolling()
-    setState({ status: 'idle' })
+    setState((prev) => {
+      if (prev.status === 'success') URL.revokeObjectURL(prev.alignedUrl)
+      return { status: 'idle' }
+    })
   }, [stopPolling])
 
   return { state, run, reset }

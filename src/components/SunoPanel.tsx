@@ -58,6 +58,17 @@ export function SunoPanel({ state }: Props) {
     )
   }
 
+  if (state.status === 'aligning') {
+    return (
+      <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-4 text-gray-300">
+        <div className="flex items-center gap-3">
+          <div className="h-3 w-3 animate-pulse rounded-full bg-purple-500" />
+          <span className="text-sm">Aligning Suno output to sonification timing…</span>
+        </div>
+      </div>
+    )
+  }
+
   if (state.status === 'error') {
     return (
       <div className="mt-4 rounded border border-red-700 bg-red-950/40 p-4 text-red-300">
@@ -71,24 +82,33 @@ export function SunoPanel({ state }: Props) {
   return (
     <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-4 text-gray-200">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider">Suno Cover</h3>
-        <span className="text-xs text-gray-500">via {state.modelUsed} · {state.tracks.length} track{state.tracks.length === 1 ? '' : 's'}</span>
+        <h3 className="text-sm font-semibold uppercase tracking-wider">Suno Cover (Aligned)</h3>
+        <span className="text-xs text-gray-500">
+          Suno {state.alignment.sunoOriginalDuration.toFixed(1)}s → aligned {state.alignment.alignedDuration.toFixed(1)}s @ lag {state.alignment.lagSec.toFixed(2)}s
+        </span>
       </div>
 
-      <div className="space-y-4">
-        {state.tracks.map((t, i) => (
-          <div key={i} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm">{t.title}</div>
-              <div className="text-xs text-gray-500">{t.duration.toFixed(1)}s</div>
-            </div>
-            <audio src={t.audioUrl} controls className="w-full" />
-            {t.sunoTags && (
-              <div className="text-xs text-gray-500">{t.sunoTags}</div>
-            )}
-          </div>
-        ))}
+      <div className="space-y-2">
+        <div className="text-sm">{state.tracks[0].title} — trimmed to match sonification</div>
+        <audio src={state.alignedUrl} controls className="w-full" />
+        {state.tracks[0].sunoTags && (
+          <div className="text-xs text-gray-500">{state.tracks[0].sunoTags}</div>
+        )}
       </div>
+
+      <details className="mt-4">
+        <summary className="cursor-pointer text-xs text-gray-500">
+          Show original Suno output ({state.tracks.length} track{state.tracks.length === 1 ? '' : 's'}, full length)
+        </summary>
+        <div className="mt-2 space-y-3">
+          {state.tracks.map((t, i) => (
+            <div key={i} className="space-y-1">
+              <div className="text-xs text-gray-400">{t.title} · {t.duration.toFixed(1)}s</div>
+              <audio src={t.audioUrl} controls className="w-full" />
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   )
 }
