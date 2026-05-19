@@ -1,11 +1,41 @@
+import { useCallback, useEffect } from 'react'
 import { UploadZone } from './components/UploadZone'
 import { ProcessingStatus } from './components/ProcessingStatus'
 import { VideoPreview } from './components/VideoPreview'
 import { AnalysisPanel } from './components/AnalysisPanel'
+import { SonificationPanel } from './components/SonificationPanel'
 import { useVideoProcessing } from './hooks/useVideoProcessing'
+import { useSonification } from './hooks/useSonification'
 
 export default function App() {
   const { state, process, reset, analysis } = useVideoProcessing()
+  const sonification = useSonification()
+
+  // Trigger sonification once analysis succeeds. Runs in parallel with the
+  // video preview being visible — does not block anything else.
+  useEffect(() => {
+    console.log('[sonif-trigger] check:', {
+      analysisStatus: analysis.status,
+      processingStatus: state.status,
+      hasStyledBlob: !!state.styledBlob,
+      sonificationStatus: sonification.state.status,
+    })
+
+    if (
+      analysis.status === 'success' &&
+      state.status === 'done' &&
+      state.styledBlob &&
+      sonification.state.status === 'idle'
+    ) {
+      console.log('[sonif-trigger] FIRING with blob', state.styledBlob)
+      sonification.run(state.styledBlob, analysis.analysis)
+    }
+  }, [analysis, state.status, state.styledBlob, sonification])
+
+  const handleReset = useCallback(() => {
+    sonification.reset()
+    reset()
+  }, [reset, sonification])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -27,10 +57,11 @@ export default function App() {
           <VideoPreview
             styledUrl={state.styledUrl}
             styledBlob={state.styledBlob}
-            onReset={reset}
+            onReset={handleReset}
           />
           <div className="w-full">
             <AnalysisPanel state={analysis} />
+            <SonificationPanel state={sonification.state} />
           </div>
         </div>
       )}
@@ -41,7 +72,7 @@ export default function App() {
             {state.error}
           </div>
           <button
-            onClick={reset}
+            onClick={handleReset}
             className="px-6 py-3 border border-neutral-700 rounded hover:border-neutral-500"
           >
             Try again
