@@ -383,7 +383,14 @@ export async function sonifyBrightness(
   accentFrames.sort((a, b) => a - b)
   const accentSet = new Set(accentFrames)
 
-  const onsets = detectOnsets(brightness, fps, threshold, 80)
+  // Density-adaptive minimum gap between onsets — sparse breathes, dense fills.
+  const DENSITY_TO_MIN_GAP_MS: Record<string, number> = {
+    sparse: 350,   // ~3 events/sec max — leaves breathing room
+    medium: 180,
+    dense:  100,
+  }
+  const minGapMs = DENSITY_TO_MIN_GAP_MS[density] ?? 180
+  const onsets = detectOnsets(brightness, fps, threshold, minGapMs)
 
   const accentPauseFrames = Math.round((accentPauseMs / 1000) * fps)
   function inAccentPause(frame: number): boolean {
@@ -432,7 +439,15 @@ export async function sonifyBrightness(
     if (ev.type === 'note') {
       const midi = quantizeBrightnessToMidi(b, scaleNotes)
       const freq = midiToFreq(midi)
-      scheduleSonifyVoice(offCtx, freq, tEv, decay, masterGain, 0.4)
+      // Velocity from onset strength — local brightness derivative magnitude.
+      // Strong frame-to-frame changes → loud notes; subtle changes → quiet notes.
+      // Creates micro-dynamic groove instead of flat 0.4 across all notes.
+      const onsetStrength = ev.frame > 0 && ev.frame < brightness.length - 1
+        ? Math.abs(brightness[ev.frame + 1] - brightness[ev.frame - 1]) * fps
+        : 0.05
+      // threshold (≈0.08 for sparse) is the "soft" baseline; 3×threshold is "loud".
+      const amp = Math.max(0.15, Math.min(0.7, 0.15 + (onsetStrength / threshold) * 0.18))
+      scheduleSonifyVoice(offCtx, freq, tEv, decay, masterGain, amp)
     } else {
       const baseIdx = Math.min(scaleNotes.length - 1, Math.max(0, Math.floor(b * scaleNotes.length)))
       const triadIdx = [
