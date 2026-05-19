@@ -48,7 +48,11 @@ export function FinalPanel({ state }: Props) {
         </span>
       </div>
 
-      <video src={state.result.outputUrl} controls className="w-full rounded mb-3" />
+      <video
+        src={state.result.outputUrl}
+        controls
+        className="max-h-[60vh] max-w-full w-auto h-auto rounded mb-3 mx-auto block"
+      />
 
       <button
         onClick={handleDownload}
