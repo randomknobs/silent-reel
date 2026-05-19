@@ -12,7 +12,12 @@ export function UploadZone({ onFile }: Props) {
       e.preventDefault()
       setDragOver(false)
       const file = e.dataTransfer.files[0]
-      if (file?.type.startsWith('video/')) onFile(file)
+      if (!file?.type.startsWith('video/')) return
+      if (file.size > 150 * 1024 * 1024) {
+        alert('File is too large (max 150 MB). Try a shorter or lower-resolution video.')
+        return
+      }
+      onFile(file)
     },
     [onFile]
   )
@@ -39,7 +44,12 @@ export function UploadZone({ onFile }: Props) {
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0]
-          if (f) onFile(f)
+          if (!f) return
+          if (f.size > 150 * 1024 * 1024) {
+            alert('File is too large (max 150 MB). Try a shorter or lower-resolution video.')
+            return
+          }
+          onFile(f)
         }}
       />
       <div className="text-neutral-400">
