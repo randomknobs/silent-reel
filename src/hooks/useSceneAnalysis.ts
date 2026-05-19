@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { AnalyzeResponse, SceneAnalysis } from '../types/analysis'
+import { compressForAnalysis } from '../lib/videoPipeline'
 
 export type AnalysisStatus =
   | { status: 'idle' }
@@ -13,19 +14,22 @@ export function useSceneAnalysis() {
   const [state, setState] = useState<AnalysisStatus>({ status: 'idle' })
 
   const analyze = useCallback(async (videoBlob: Blob) => {
-    if (videoBlob.size > MAX_INLINE_VIDEO_BYTES) {
-      setState({
-        status: 'error',
-        error: `Styled video is ${(videoBlob.size / 1024 / 1024).toFixed(1)} MB — exceeds 4.5 MB inline limit for Netlify Functions. Try a shorter clip or lower resolution.`,
-      })
-      return
-    }
-
     setState({ status: 'analyzing' })
 
     try {
-      // Convert blob to base64 in chunks (avoid stack overflow on large inputs)
-      const arrayBuffer = await videoBlob.arrayBuffer()
+      // Step 1: compress to a Gemini-sized proxy (separate from user's full-quality blob)
+      const compressedBlob = await compressForAnalysis(videoBlob)
+
+      if (compressedBlob.size > MAX_INLINE_VIDEO_BYTES) {
+        setState({
+          status: 'error',
+          error: `Even compressed, the video is ${(compressedBlob.size / 1024 / 1024).toFixed(1)} MB — exceeds 4.5 MB inline limit. Try a shorter clip.`,
+        })
+        return
+      }
+
+      // Step 2: blob → base64 in chunks (operate on COMPRESSED, not original)
+      const arrayBuffer = await compressedBlob.arrayBuffer()
       const bytes = new Uint8Array(arrayBuffer)
       let binary = ''
       const chunkSize = 8192
@@ -39,7 +43,7 @@ export function useSceneAnalysis() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoBase64,
-          mimeType: videoBlob.type || 'video/mp4',
+          mimeType: compressedBlob.type || 'video/mp4',
         }),
       })
 

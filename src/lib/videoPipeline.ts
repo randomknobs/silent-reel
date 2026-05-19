@@ -220,3 +220,66 @@ export async function applyStyle(
     try { await ff.deleteFile(OUTPUT_NAME) } catch {}
   }
 }
+
+/**
+ * Take a styled video blob and produce an aggressively compressed copy for
+ * Gemini analysis. The user-facing styled video is NOT modified — this is a
+ * separate proxy file solely for analysis upload.
+ *
+ * Target: 360p, CRF 32, libx264 veryfast. Typically 1–3 MB for 30–60 sec input.
+ */
+export async function compressForAnalysis(styledBlob: Blob): Promise<Blob> {
+  const ff = await getFFmpeg()
+
+  const C_INPUT = 'styled_for_analysis.mp4'
+  const C_OUTPUT = 'analysis_proxy.mp4'
+
+  const arrayBuffer = await styledBlob.arrayBuffer()
+  await ff.writeFile(C_INPUT, new Uint8Array(arrayBuffer))
+
+  const args = [
+    '-i', C_INPUT,
+    '-an',
+    '-threads', '1',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '32',
+    '-vf', 'scale=-2:360',
+    '-pix_fmt', 'yuv420p',
+    C_OUTPUT,
+  ]
+
+  if (import.meta.env.DEV) {
+    console.log('[compress-for-analysis] args:', args.join(' '))
+  }
+
+  try {
+    // 60-sec timeout — compress is much lighter than styling, should finish fast
+    const exitCode = await Promise.race([
+      ff.exec(args),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Compress timeout (60s)')), 60_000),
+      ),
+    ])
+
+    if (exitCode !== 0) {
+      throw new Error(`compress ffmpeg exited with code ${exitCode}`)
+    }
+
+    const data = await ff.readFile(C_OUTPUT)
+    const bytes = (data instanceof Uint8Array ? data : new TextEncoder().encode(String(data))) as Uint8Array<ArrayBuffer>
+    const compressed = new Blob([bytes], { type: 'video/mp4' })
+
+    if (import.meta.env.DEV) {
+      console.log(
+        `[compress-for-analysis] ${(styledBlob.size / 1024 / 1024).toFixed(1)} MB → ` +
+        `${(compressed.size / 1024 / 1024).toFixed(2)} MB`,
+      )
+    }
+
+    return compressed
+  } finally {
+    try { await ff.deleteFile(C_INPUT) } catch {}
+    try { await ff.deleteFile(C_OUTPUT) } catch {}
+  }
+}
