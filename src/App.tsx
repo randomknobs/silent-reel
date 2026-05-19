@@ -4,12 +4,15 @@ import { ProcessingStatus } from './components/ProcessingStatus'
 import { VideoPreview } from './components/VideoPreview'
 import { AnalysisPanel } from './components/AnalysisPanel'
 import { SonificationPanel } from './components/SonificationPanel'
+import { SunoPanel } from './components/SunoPanel'
 import { useVideoProcessing } from './hooks/useVideoProcessing'
 import { useSonification } from './hooks/useSonification'
+import { useSunoGeneration } from './hooks/useSunoGeneration'
 
 export default function App() {
   const { state, process, reset, analysis } = useVideoProcessing()
   const sonification = useSonification()
+  const sunoGen = useSunoGeneration()
 
   // Trigger sonification once analysis succeeds. Runs in parallel with the
   // video preview being visible — does not block anything else.
@@ -32,10 +35,26 @@ export default function App() {
     }
   }, [analysis, state.status, state.styledBlob, sonification])
 
+  // Once sonification succeeds, kick Suno cover-generation pipeline (upload → submit → poll)
+  useEffect(() => {
+    if (
+      sonification.state.status === 'success' &&
+      analysis.status === 'success' &&
+      sunoGen.state.status === 'idle'
+    ) {
+      sunoGen.run(
+        sonification.state.result.mp3Blob,
+        analysis.analysis,
+        sonification.state.result.durationSec,
+      )
+    }
+  }, [sonification.state, analysis, sunoGen])
+
   const handleReset = useCallback(() => {
+    sunoGen.reset()
     sonification.reset()
     reset()
-  }, [reset, sonification])
+  }, [reset, sonification, sunoGen])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -62,6 +81,7 @@ export default function App() {
           <div className="w-full">
             <AnalysisPanel state={analysis} />
             <SonificationPanel state={sonification.state} />
+            <SunoPanel state={sunoGen.state} />
           </div>
         </div>
       )}

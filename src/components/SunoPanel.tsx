@@ -1,0 +1,94 @@
+import type { SunoGenStatus } from '../hooks/useSunoGeneration'
+
+interface Props {
+  state: SunoGenStatus
+}
+
+export function SunoPanel({ state }: Props) {
+  if (state.status === 'idle') return null
+
+  if (state.status === 'uploading') {
+    return (
+      <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-4 text-gray-300">
+        <div className="flex items-center gap-3">
+          <div className="h-3 w-3 animate-pulse rounded-full bg-purple-500" />
+          <span className="text-sm">Uploading sonification to Kie…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (state.status === 'submitting') {
+    return (
+      <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-4 text-gray-300">
+        <div className="flex items-center gap-3">
+          <div className="h-3 w-3 animate-pulse rounded-full bg-purple-500" />
+          <span className="text-sm">Submitting cover job to Suno…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (state.status === 'generating') {
+    const dots = '.'.repeat((state.pollAttempt % 4) + 1)
+    return (
+      <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-4 text-gray-300">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="flex items-center gap-3">
+            <div className="h-3 w-3 animate-pulse rounded-full bg-purple-500" />
+            <span className="text-sm">Suno generating{dots}</span>
+          </div>
+          <span className="text-xs text-gray-500">
+            {state.sunoStatus} · poll {state.pollAttempt}/72
+          </span>
+        </div>
+
+        {state.tracks.length > 0 && (
+          <div className="mt-3 text-xs text-gray-400">
+            Streaming preview available — final still rendering:
+            {state.tracks.map((t, i) => (
+              <div key={i} className="mt-2">
+                <div className="text-xs text-gray-300 mb-1">{t.title}</div>
+                <audio src={t.streamUrl} controls className="w-full" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="mt-4 rounded border border-red-700 bg-red-950/40 p-4 text-red-300">
+        <div className="text-sm font-medium">Suno generation failed</div>
+        <div className="mt-1 text-xs text-red-200/80">{state.error}</div>
+      </div>
+    )
+  }
+
+  // success
+  return (
+    <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-4 text-gray-200">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold uppercase tracking-wider">Suno Cover</h3>
+        <span className="text-xs text-gray-500">via {state.modelUsed} · {state.tracks.length} track{state.tracks.length === 1 ? '' : 's'}</span>
+      </div>
+
+      <div className="space-y-4">
+        {state.tracks.map((t, i) => (
+          <div key={i} className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm">{t.title}</div>
+              <div className="text-xs text-gray-500">{t.duration.toFixed(1)}s</div>
+            </div>
+            <audio src={t.audioUrl} controls className="w-full" />
+            {t.sunoTags && (
+              <div className="text-xs text-gray-500">{t.sunoTags}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
