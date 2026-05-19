@@ -5,14 +5,17 @@ import { VideoPreview } from './components/VideoPreview'
 import { AnalysisPanel } from './components/AnalysisPanel'
 import { SonificationPanel } from './components/SonificationPanel'
 import { SunoPanel } from './components/SunoPanel'
+import { FinalPanel } from './components/FinalPanel'
 import { useVideoProcessing } from './hooks/useVideoProcessing'
 import { useSonification } from './hooks/useSonification'
 import { useSunoGeneration } from './hooks/useSunoGeneration'
+import { useFinalMux } from './hooks/useFinalMux'
 
 export default function App() {
   const { state, process, reset, analysis } = useVideoProcessing()
   const sonification = useSonification()
   const sunoGen = useSunoGeneration()
+  const finalMux = useFinalMux()
 
   // Trigger sonification once analysis succeeds. Runs in parallel with the
   // video preview being visible — does not block anything else.
@@ -50,11 +53,24 @@ export default function App() {
     }
   }, [sonification.state, analysis, sunoGen])
 
+  // After Suno alignment finishes, run final mux: styled video + aligned audio + watermark
+  useEffect(() => {
+    if (
+      sunoGen.state.status === 'success' &&
+      state.status === 'done' &&
+      state.styledBlob &&
+      finalMux.state.status === 'idle'
+    ) {
+      finalMux.run(state.styledBlob, sunoGen.state.alignment.alignedBlob)
+    }
+  }, [sunoGen.state, state.status, state.styledBlob, finalMux])
+
   const handleReset = useCallback(() => {
+    finalMux.reset()
     sunoGen.reset()
     sonification.reset()
     reset()
-  }, [reset, sonification, sunoGen])
+  }, [reset, sonification, sunoGen, finalMux])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -82,6 +98,7 @@ export default function App() {
             <AnalysisPanel state={analysis} />
             <SonificationPanel state={sonification.state} />
             <SunoPanel state={sunoGen.state} />
+            <FinalPanel state={finalMux.state} />
           </div>
         </div>
       )}
