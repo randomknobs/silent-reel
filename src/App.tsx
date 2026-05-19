@@ -1,10 +1,11 @@
 import { UploadZone } from './components/UploadZone'
 import { ProcessingStatus } from './components/ProcessingStatus'
 import { VideoPreview } from './components/VideoPreview'
+import { AnalysisPanel } from './components/AnalysisPanel'
 import { useVideoProcessing } from './hooks/useVideoProcessing'
 
 export default function App() {
-  const { state, process, reset } = useVideoProcessing()
+  const { state, process, reset, analysis } = useVideoProcessing()
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -22,11 +23,16 @@ export default function App() {
       )}
 
       {state.status === 'done' && state.styledUrl && state.styledBlob && (
-        <VideoPreview
-          styledUrl={state.styledUrl}
-          styledBlob={state.styledBlob}
-          onReset={reset}
-        />
+        <div className="w-full max-w-3xl flex flex-col items-center">
+          <VideoPreview
+            styledUrl={state.styledUrl}
+            styledBlob={state.styledBlob}
+            onReset={reset}
+          />
+          <div className="w-full">
+            <AnalysisPanel state={analysis} />
+          </div>
+        </div>
       )}
 
       {state.status === 'error' && (

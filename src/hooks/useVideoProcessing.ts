@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { applyStyle } from '../lib/videoPipeline'
+import { useSceneAnalysis } from './useSceneAnalysis'
 
 type Status = 'idle' | 'loading-ffmpeg' | 'processing' | 'done' | 'error'
 
@@ -39,8 +40,10 @@ export function useVideoProcessing() {
     error: null,
   })
 
+  const sceneAnalysis = useSceneAnalysis()
+
   const process = useCallback(async (file: File) => {
-    // Revoke previous URL to avoid memory leak
+    // Revoke previous URL + clear any prior analysis to avoid showing stale results
     setState((s) => {
       if (s.styledUrl) URL.revokeObjectURL(s.styledUrl)
       return {
@@ -51,6 +54,7 @@ export function useVideoProcessing() {
         error: null,
       }
     })
+    sceneAnalysis.reset()
 
     try {
       setState((s) => ({ ...s, status: 'processing' }))
@@ -67,6 +71,9 @@ export function useVideoProcessing() {
         styledBlob,
         styledUrl,
       }))
+
+      // Kick off Gemini analysis in the background — does not block the preview
+      sceneAnalysis.analyze(styledBlob)
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -74,7 +81,7 @@ export function useVideoProcessing() {
         error: describeError(err),
       }))
     }
-  }, [])
+  }, [sceneAnalysis])
 
   const reset = useCallback(() => {
     setState((s) => {
@@ -87,7 +94,8 @@ export function useVideoProcessing() {
         error: null,
       }
     })
-  }, [])
+    sceneAnalysis.reset()
+  }, [sceneAnalysis])
 
-  return { state, process, reset }
+  return { state, process, reset, analysis: sceneAnalysis.state }
 }
