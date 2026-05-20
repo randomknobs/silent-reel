@@ -750,7 +750,34 @@ export async function alignSunoToSonification(
   const sunoEnv = zScoreNormalize(computeOnsetEnvelope(sunoBuf, envFps))
   const sonEnv = zScoreNormalize(computeOnsetEnvelope(sonifiedBuf, envFps))
 
-  // 4. Cross-correlate
+  // Edge case: Suno V5 sometimes generates variants shorter than the sonification.
+  // Standard cross-correlation (Suno as signal, sonification as reference) breaks
+  // because signal.length < reference.length. Flip: use Suno envelope as the
+  // SHORT pattern, search where it best fits within sonification. Then keep
+  // Suno as-is (no trimming) — it's already shorter than the target window.
+  if (sunoBuf.duration < sonifiedBuf.duration - 0.5) {
+    const maxFlipLag = Math.max(0, sonEnv.length - sunoEnv.length)
+    const { lag: lagFrames, score } = crossCorrelate(sonEnv, sunoEnv, maxFlipLag)
+    const lagSec = lagFrames / envFps
+
+    if (import.meta.env.DEV) {
+      console.log(
+        `[align] Suno (${sunoBuf.duration.toFixed(1)}s) shorter than sonification ` +
+        `(${sonifiedBuf.duration.toFixed(1)}s); using as-is. score=${score.toFixed(2)}, ` +
+        `inferred lag=${lagSec.toFixed(2)}s`,
+      )
+    }
+
+    return {
+      alignedBlob: audioBufferToMp3Blob(sunoBuf),
+      lagSec,
+      score,
+      sunoOriginalDuration: sunoBuf.duration,
+      alignedDuration: sunoBuf.duration,
+    }
+  }
+
+  // 4. Standard case: Suno >= sonification, slide sonification across Suno
   const maxLagFrames = Math.round(maxLagSec * envFps)
   const { lag: lagFrames, score } = crossCorrelate(sunoEnv, sonEnv, maxLagFrames)
   const lagSec = lagFrames / envFps
@@ -759,7 +786,7 @@ export async function alignSunoToSonification(
     console.log(`[align] lag=${lagSec.toFixed(2)}s, score=${score.toFixed(2)}`)
   }
 
-  // 5. Trim to [lagSec, lagSec + sonifiedDuration]
+  // 5. Trim Suno buffer to [lagSec, lagSec + sonifiedDuration]
   const endSec = Math.min(lagSec + sonifiedBuf.duration, sunoBuf.duration)
   const aligned = trimAudioBufferRange(sunoBuf, lagSec, endSec)
 
