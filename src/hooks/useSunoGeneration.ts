@@ -10,7 +10,7 @@ export type SunoGenStatus =
   | { status: 'submitting' }
   | { status: 'generating'; sunoStatus: SunoStatus; pollAttempt: number; tracks: SunoTrack[] }
   | { status: 'aligning'; tracks: SunoTrack[] }
-  | { status: 'success'; tracks: SunoTrack[]; alignment: AlignmentResult; alignedUrl: string; modelUsed: 'V5' }
+  | { status: 'success'; tracks: SunoTrack[]; alignments: Array<{ trackIndex: number; result: AlignmentResult; alignedUrl: string }>; modelUsed: 'V5' }
   | { status: 'error'; error: string }
 
 const POLL_INTERVAL_MS = 5000
@@ -149,29 +149,38 @@ export function useSunoGeneration() {
           setState({ status: 'aligning', tracks })
 
           try {
-            const firstTrack = tracks[0]
-            if (!firstTrack.audioUrl) {
-              throw new Error('First track has no audioUrl')
-            }
+            // Align ALL tracks (Suno V5 returns 2 variants). Sort by correlation
+            // score, expose all so the user can choose / download either.
+            const alignmentPromises = tracks
+              .filter(t => !!t.audioUrl)
+              .map(async (t, idx) => {
+                try {
+                  const result = await alignSunoToSonification(t.audioUrl, sonifiedMp3)
+                  return { trackIndex: idx, result, alignedUrl: URL.createObjectURL(result.alignedBlob) }
+                } catch (e) {
+                  console.warn(`[suno-align] track ${idx} failed:`, e)
+                  return null
+                }
+              })
 
-            const alignment = await alignSunoToSonification(firstTrack.audioUrl, sonifiedMp3)
-            const alignedUrl = URL.createObjectURL(alignment.alignedBlob)
+            const alignments = (await Promise.all(alignmentPromises))
+              .filter((a): a is { trackIndex: number; result: AlignmentResult; alignedUrl: string } => a !== null)
+              .sort((a, b) => b.result.score - a.result.score)
+
+            if (alignments.length === 0) {
+              throw new Error('All tracks failed to align')
+            }
 
             if (import.meta.env.DEV) {
-              console.log(
-                `[suno-align] Suno ${alignment.sunoOriginalDuration.toFixed(1)}s → ` +
-                `aligned ${alignment.alignedDuration.toFixed(1)}s @ lag ${alignment.lagSec.toFixed(2)}s ` +
-                `(corr score ${alignment.score.toFixed(2)})`,
-              )
+              alignments.forEach((a, i) => {
+                console.log(
+                  `[suno-align] rank #${i + 1}: track ${a.trackIndex + 1} ` +
+                  `lag=${a.result.lagSec.toFixed(2)}s score=${a.result.score.toFixed(2)}`,
+                )
+              })
             }
 
-            setState({
-              status: 'success',
-              tracks,
-              alignment,
-              alignedUrl,
-              modelUsed: 'V5',
-            })
+            setState({ status: 'success', tracks, alignments, modelUsed: 'V5' })
           } catch (alignErr) {
             console.error('[suno-align] failed:', alignErr)
             setState({
@@ -197,7 +206,9 @@ export function useSunoGeneration() {
   const reset = useCallback(() => {
     stopPolling()
     setState((prev) => {
-      if (prev.status === 'success') URL.revokeObjectURL(prev.alignedUrl)
+      if (prev.status === 'success') {
+        prev.alignments.forEach(a => URL.revokeObjectURL(a.alignedUrl))
+      }
       return { status: 'idle' }
     })
   }, [stopPolling])

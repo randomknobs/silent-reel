@@ -84,16 +84,46 @@ export function SunoPanel({ state }: Props) {
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider">Suno Cover (Aligned)</h3>
         <span className="text-xs text-gray-500">
-          Suno {state.alignment.sunoOriginalDuration.toFixed(1)}s → aligned {state.alignment.alignedDuration.toFixed(1)}s @ lag {state.alignment.lagSec.toFixed(2)}s
+          via {state.modelUsed} · {state.alignments.length} variant{state.alignments.length === 1 ? '' : 's'}
         </span>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-sm">{state.tracks[0].title} — trimmed to match sonification</div>
-        <audio src={state.alignedUrl} controls className="w-full" />
-        {state.tracks[0].sunoTags && (
-          <div className="text-xs text-gray-500">{state.tracks[0].sunoTags}</div>
-        )}
+      <div className="space-y-4">
+        {state.alignments.map((a, i) => {
+          const track = state.tracks[a.trackIndex]
+          const isBest = i === 0
+          const handleDownload = () => {
+            const link = document.createElement('a')
+            link.href = a.alignedUrl
+            link.download = `silent-reel-suno-${a.trackIndex + 1}.mp3`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+          }
+          return (
+            <div
+              key={i}
+              className={`space-y-2 ${isBest ? 'rounded border border-amber-700/40 bg-amber-950/10 p-3' : ''}`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-sm flex items-center gap-2">
+                  {track.title}
+                  {isBest && <span className="text-xs text-amber-400">★ best match</span>}
+                </div>
+                <span className="text-xs text-gray-500">
+                  score {a.result.score.toFixed(1)} · lag {a.result.lagSec.toFixed(2)}s
+                </span>
+              </div>
+              <audio src={a.alignedUrl} controls className="w-full" />
+              <button
+                onClick={handleDownload}
+                className="text-xs text-gray-400 hover:text-gray-200 transition underline"
+              >
+                ↓ download variant {a.trackIndex + 1}
+              </button>
+            </div>
+          )
+        })}
       </div>
 
       <details className="mt-4">

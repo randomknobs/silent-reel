@@ -54,7 +54,8 @@ export default function App() {
       state.styledBlob &&
       finalMux.state.status === 'idle'
     ) {
-      finalMux.run(state.styledBlob, sunoGen.state.alignment.alignedBlob)
+      // Use the best-match aligned track (already sorted by correlation score in useSunoGeneration)
+      finalMux.run(state.styledBlob, sunoGen.state.alignments[0].result.alignedBlob)
     }
   }, [sunoGen.state, state.status, state.styledBlob, finalMux])
 
