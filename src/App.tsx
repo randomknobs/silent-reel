@@ -42,6 +42,7 @@ export default function App() {
         sonification.state.result.mp3Blob,
         analysis.analysis,
         sonification.state.result.durationSec,
+        sonification.state.result.inferredBpm,
       )
     }
   }, [sonification.state, analysis, sunoGen])

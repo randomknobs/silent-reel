@@ -69,6 +69,7 @@ export interface SonifyResult {
     dims: { w: number; h: number }
     frames: number
   }
+  inferredBpm: number | null
 }
 
 export type SonifyProgressStage = 'extract' | 'synth' | 'encode'

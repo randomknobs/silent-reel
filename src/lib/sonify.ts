@@ -411,6 +411,34 @@ export async function sonifyBrightness(
   }
   events.sort((a, b) => a.frame - b.frame)
 
+  // Infer effective tempo from onset timing. Median IOI maps to BPM under
+  // density-dependent subdivision: sparse onsets = quarters, medium = eighths,
+  // dense = sixteenths. Pass this BPM to Suno later so its beat grid locks
+  // to the same pulse our accents fall on.
+  let inferredBpm: number | null = null
+  if (onsets.length > 3) {
+    const onsetTimes = onsets.map((f) => f / fps)
+    const iois = onsetTimes.slice(1).map((t, i) => t - onsetTimes[i])
+    iois.sort((a, b) => a - b)
+    const medianIoi = iois[Math.floor(iois.length / 2)]
+
+    const subdivPerBeat: Record<string, number> = {
+      sparse: 1,    // onset = quarter note
+      medium: 2,    // onset = eighth note
+      dense:  4,    // onset = sixteenth note
+    }
+    const subdiv = subdivPerBeat[density] ?? 2
+    const rawBpm = (60 / medianIoi) / subdiv
+    inferredBpm = Math.round(Math.max(50, Math.min(180, rawBpm)))
+
+    if (import.meta.env.DEV) {
+      console.log(
+        `[sonify] inferred tempo: ${inferredBpm} BPM ` +
+        `(median IOI ${medianIoi.toFixed(3)}s, density=${density}, subdiv=${subdiv})`,
+      )
+    }
+  }
+
   if (import.meta.env.DEV && events.length === 0) {
     console.warn('[sonify] no events to render; brightness curve may be too flat')
   }
@@ -486,7 +514,10 @@ export async function sonifyBrightness(
     )
   }
 
-  return await offCtx.startRendering()
+  const buf = await offCtx.startRendering()
+  // Stash inferred BPM on the buffer — AudioBuffer doesn't carry metadata.
+  ;(buf as unknown as { __inferredBpm?: number }).__inferredBpm = inferredBpm ?? undefined
+  return buf
 }
 
 // ── MP3 encoding ─────────────────────────────────────────────────────────────
@@ -582,6 +613,7 @@ export async function sonifyVideoToMp3(
       dims: r.dims,
       frames: r.brightness.length,
     },
+    inferredBpm: (buf as unknown as { __inferredBpm?: number }).__inferredBpm ?? null,
   }
 }
 

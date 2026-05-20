@@ -27,7 +27,12 @@ export function useSunoGeneration() {
     }
   }, [])
 
-  const run = useCallback(async (sonifiedMp3: Blob, analysis: SceneAnalysis, sonifiedDurationSec: number) => {
+  const run = useCallback(async (
+    sonifiedMp3: Blob,
+    analysis: SceneAnalysis,
+    sonifiedDurationSec: number,
+    inferredBpm: number | null,
+  ) => {
     stopPolling()
     setState({ status: 'uploading' })
 
@@ -60,11 +65,22 @@ export function useSunoGeneration() {
 
       const sonifiedSec = Math.round(sonifiedDurationSec)
       const timingBlock =
-        `Loop-style cover, ${sonifiedSec} seconds. Cold open at 0:00, hard cut ending. ` +
-        `Source-locked timing: every onset and accent in source audio occurs at exact ` +
-        `same timestamp in output. Strict preservation of source structure and pacing.`
+        `Source audio is a rhythmic skeleton. Each transient marks a musical hit. ` +
+        `Use dramatic pauses, rubato pacing, and dynamic variation. Cold open at 0:00, ` +
+        `hard cut ending after ${sonifiedSec} seconds.`
 
-      const finalPrompt = `${analysis.music_prompt}\n\n${timingBlock}`
+      // If we measured an explicit tempo from the sonification, inject it as a
+      // hard constraint — Suno will lock its beat grid to this BPM, ensuring its
+      // kicks/snares fall on the same pulse our sonification accents do.
+      const tempoBlock = inferredBpm !== null
+        ? `\n\nTEMPO: exactly ${inferredBpm} BPM. Lock the beat grid to this tempo strictly.`
+        : ''
+
+      const finalPrompt = `${analysis.music_prompt}${tempoBlock}\n\n${timingBlock}`
+
+      if (import.meta.env.DEV) {
+        console.log(`[suno] tempo injection: ${inferredBpm ?? 'none'} BPM`)
+      }
       const finalStyle = [
         analysis.cinema_genre,
         ...analysis.genre_suggestions,
