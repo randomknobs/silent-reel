@@ -315,11 +315,12 @@ function scheduleSonifyVoice(
   dur: number,
   dest: AudioNode,
   amplitude: number,
+  attackSec: number = 0.008,
 ) {
   const amp = amplitude ?? 0.4
   const t = startTime
   const totalDur = Math.max(dur, 0.05)
-  const attackT = 0.008
+  const attackT = attackSec
   const peakT = t + attackT
   const endT = t + totalDur
   const tailT = endT + 0.02
@@ -450,18 +451,27 @@ export async function sonifyBrightness(
       scheduleSonifyVoice(offCtx, freq, tEv, decay, masterGain, amp)
     } else {
       const baseIdx = Math.min(scaleNotes.length - 1, Math.max(0, Math.floor(b * scaleNotes.length)))
-      const triadIdx = [
-        baseIdx,
-        Math.min(scaleNotes.length - 1, baseIdx + 2),
-        Math.min(scaleNotes.length - 1, baseIdx + 4),
+      // Root in middle register, third + fifth, plus octave below (weight) and
+      // octave above (sparkle). Spreads accent across 3 octaves so it doesn't
+      // compete with melody notes in the same register.
+      const centerMidi = scaleNotes[baseIdx]
+      const thirdMidi  = scaleNotes[Math.min(scaleNotes.length - 1, baseIdx + 2)]
+      const fifthMidi  = scaleNotes[Math.min(scaleNotes.length - 1, baseIdx + 4)]
+      const chordMidis = [
+        centerMidi - 12,   // bass octave below — weight
+        centerMidi,         // root
+        thirdMidi,          // third
+        fifthMidi,          // fifth
+        centerMidi + 12,    // octave above — sparkle/click
       ]
+
       const accentGain = offCtx.createGain()
       accentGain.gain.value = accentVolume
       accentGain.connect(masterGain)
       const accentDecay = maxDecayMs / 1000
-      for (const ti of triadIdx) {
-        const midi = scaleNotes[ti]
-        scheduleSonifyVoice(offCtx, midiToFreq(midi), tEv, accentDecay, accentGain, 0.4)
+      const accentAttack = 0.002  // sharp percussive attack (2 ms vs default 8 ms)
+      for (const midi of chordMidis) {
+        scheduleSonifyVoice(offCtx, midiToFreq(midi), tEv, accentDecay, accentGain, 0.55, accentAttack)
       }
     }
 
