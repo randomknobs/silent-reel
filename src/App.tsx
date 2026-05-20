@@ -55,8 +55,13 @@ export default function App() {
       state.styledBlob &&
       finalMux.state.status === 'idle'
     ) {
-      // Use the best-match aligned track (already sorted by correlation score in useSunoGeneration)
-      finalMux.run(state.styledBlob, sunoGen.state.alignments[0].result.alignedBlob)
+      // Mux a final MP4 for every aligned variant. Order in array matches
+      // alignment order (best-score first → ★ best match) — FinalPanel will
+      // surface them in that order.
+      finalMux.run(
+        state.styledBlob,
+        sunoGen.state.alignments.map((a) => a.result.alignedBlob),
+      )
     }
   }, [sunoGen.state, state.status, state.styledBlob, finalMux])
 
