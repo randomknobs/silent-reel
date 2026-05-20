@@ -64,10 +64,20 @@ export function useSunoGeneration() {
       setState({ status: 'submitting' })
 
       const sonifiedSec = Math.round(sonifiedDurationSec)
+
+      const dynamicsBlock =
+        `EXTREME DYNAMIC RANGE — opera/film-score style. Pianissimo (pp) string beds ` +
+        `and woodwind whispers in valleys; fortissimo (ff) orchestral hits on every ` +
+        `accent. Treat marked transients as sforzando (sfz) — sudden loud bursts against ` +
+        `quiet backdrop. Subito piano release after each climax — drop to whisper instantly. ` +
+        `USE SILENCE as a compositional element: full caesura/grand pause between phrases. ` +
+        `Bernard Herrmann and Korngold-style dramatic shock dynamics. Tremolo strings in ` +
+        `quiet passages, full orchestra tutti on accents.`
+
       const timingBlock =
-        `Source audio is a rhythmic skeleton. Each transient marks a musical hit. ` +
-        `Use dramatic pauses, rubato pacing, and dynamic variation. Cold open at 0:00, ` +
-        `hard cut ending after ${sonifiedSec} seconds.`
+        `Source audio is a rhythmic skeleton. Each transient marks a musical hit at the ` +
+        `marked timestamp. Rubato pacing between hits. Cold open at 0:00, hard cut ending ` +
+        `after ${sonifiedSec} seconds.`
 
       // If we measured an explicit tempo from the sonification, inject it as a
       // hard constraint — Suno will lock its beat grid to this BPM, ensuring its
@@ -76,7 +86,7 @@ export function useSunoGeneration() {
         ? `\n\nTEMPO: exactly ${inferredBpm} BPM. Lock the beat grid to this tempo strictly.`
         : ''
 
-      const finalPrompt = `${analysis.music_prompt}${tempoBlock}\n\n${timingBlock}`
+      const finalPrompt = `${analysis.music_prompt}${tempoBlock}\n\n${dynamicsBlock}\n\n${timingBlock}`
 
       if (import.meta.env.DEV) {
         console.log(`[suno] tempo injection: ${inferredBpm ?? 'none'} BPM`)
